@@ -61,13 +61,13 @@ void updateTilt(int posInput) {
   }
 
   if (currentTilt != previousTilt) {
-    updateLight();
+    updateLight(currentTilt, previousTilt);
   }
 
   previousTilt = currentTilt;
 }
 
-void updateLight() {
+void updateLight(currentTiltInput, previousTiltInput) {
   pixels.rainbow(hue);
   pixels.show();
   hue += 2560;
