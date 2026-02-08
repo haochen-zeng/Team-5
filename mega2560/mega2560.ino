@@ -2,6 +2,7 @@
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include "pitch.h"
 
 #define UNO_ADDR 0x08
 
@@ -10,7 +11,10 @@ LiquidCrystal_I2C myLcd(0x3f, 16, 2);
 const int potPin = A0;
 const int lightSensorPin = A1;
 const int ledPin = 12;
+
 const int buzzerPin = 13;
+int notes[] = {NOTE_C5, NOTE_D5, NOTE_E5};
+int noteCount = sizeof(notes) / sizeof(notes[0]);
 
 enum Mode { SEESAW, ARCHER, POLLEN, MODE_COUNT };
 constexpr int ZONE_SIZE = 1024 / MODE_COUNT;
@@ -94,8 +98,7 @@ void updateLcd() {
 }
 
 void playModeTone() {
-  int freq = 261 + currentMode * 32;
-  tone(buzzerPin, freq, 10);
+  tone(buzzerPin, notes[currentMode], 10);
 }
 
 void playToneForMode() {
@@ -108,7 +111,7 @@ void playToneForMode() {
 
 void playSeesawTone() {
   if (triggerFromUno == 1 && lastTriggerFromUno == 0) {
-    playRandomTone(3);
+    playRandomTone();
   }
 }
 
@@ -117,12 +120,12 @@ void playArcherTone() {
   static unsigned long lastArcherPulse = 0;
 
   if (triggerFromUno == 1 && lastArcherTrigger == 0) {
-    tone(buzzerPin, 261, 10);
+    tone(buzzerPin, NOTE_C5, 10);
   } 
   else if (valueFromUno > 0 && triggerFromUno == 0) {
     int pulseInterval = map(valueFromUno, 0, 100, 200, 20); 
     if (millis() - lastArcherPulse > pulseInterval) {
-      int freq = map(valueFromUno, 0, 100, 261, 1046);
+      int freq = map(valueFromUno, 0, 100, NOTE_C5, NOTE_C6);
       tone(buzzerPin, freq, 10);
       lastArcherPulse = millis();
     }
@@ -133,12 +136,11 @@ void playArcherTone() {
 
 void playPollenTone() {
   if (triggerFromMega == 1 && lastTriggerFromMega == 0) {
-    playRandomTone(3);
+    playRandomTone();
   }
   lastTriggerFromMega = triggerFromMega;
 }
 
-void playRandomTone(uint8_t notes) {
-  int freq = 261 + 32 * random(notes);
-  tone(buzzerPin, freq, 10);
+void playRandomTone() {
+  tone(buzzerPin, notes[random(noteCount)], 10);
 }
