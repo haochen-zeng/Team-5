@@ -67,13 +67,13 @@ void setup() {
   pinMode(buttonMinusPin, INPUT_PULLUP);
   Wire.begin(I2C_ADDR);
   Wire.onReceive(receiveEvent);
+  Wire.onRequest(requestEvent);
 }
 
 void loop() {
   handleServoButtons();
   updateTiltState();
   runCurrentMode();
-  sendToMega();
   delay(25);
 }
 
@@ -105,27 +105,23 @@ void runCurrentMode() {
   }
 }
 
-void sendToMega() {
+void requestEvent() {
+  uint8_t dataToSend[2] = {0, 0};
   switch (currentMode) {
     case 0:
-      remoteValue = tiltChangeCounter;
-      remoteTrigger = (currentTilt != previousTilt) ? 1 : 0;
+      dataToSend[0] = (uint8_t)tiltChangeCounter;
+      dataToSend[1] = (currentTilt != TiltState::MIDDLE) ? 1 : 0;
       break;
     case 1:
-      remoteValue = tension;
-      remoteTrigger = (archerState == RELEASE) ? 1 : 0;
+      dataToSend[0] = (uint8_t)tension;
+      dataToSend[1] = (archerState == RELEASE) ? 1 : 0;
       break;
     case 2:
-      remoteValue = 0;
+      dataToSend[0] = 0;
+      dataToSend[1] = 0;
       break;
   }
-  if (millis() - lastSend < 30) return;
-  lastSend = millis();
-  Wire.beginTransmission(I2C_ADDR);
-  Wire.write(currentMode);
-  Wire.write(remoteValue);
-  Wire.write(remoteTrigger);
-  Wire.endTransmission();
+  Wire.write(dataToSend, 2);
 }
 
 void runSeesawMode() {

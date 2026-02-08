@@ -9,35 +9,37 @@ LiquidCrystal_I2C myLcd(0x3f, 16, 2);
 
 const int potPin = A0;
 const int lightSensorPin = A1;
+const int ledPin = 12;
 const int buzzerPin = 13;
 
 enum Mode { SEESAW, ARCHER, POLLEN, MODE_COUNT };
 constexpr int ZONE_SIZE = 1024 / MODE_COUNT;
 Mode currentMode = SEESAW;
 
-uint8_t remoteValue = 0;
-uint8_t remoteTrigger = 0;
-unsigned long lastSend = 0;
+uint8_t valueFromMega = 0;
+uint8_t triggerFromMega = 0;
+uint8_t lastTriggerFromMega = 0;
+uint8_t valueFromUno = 0;
+uint8_t triggerFromUno = 0;
+uint8_t lastTriggerFromUno = 0;
+unsigned long lastExchange = 0;
 
 void setup() {
+  Serial.begin(9600);
   Wire.begin();
-  Wire.onReceive(receiveEvent);
   myLcd.init();
   myLcd.backlight();
   pinMode(buzzerPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(lightSensorPin, INPUT);
+  digitalWrite(ledPin, HIGH);
   updateLcd();
 }
 
 void loop() {
   handleModeSwitch();
-  sendToUNO();
-}
-
-void receiveEvent(int howMany) {
-  if (howMany < 3) return;
-  currentMode = Wire.read();
-  remoteValue = Wire.read();
-  remoteTrigger = Wire.read();
+  readSensors();
+  exchangeData();
   playToneForMode();
 }
 
@@ -52,14 +54,34 @@ void handleModeSwitch() {
   }
 }
 
-void sendToUNO() {
-  if (millis() - lastSend < 30) return;
-  lastSend = millis();
+void exchangeData() {
+  if (millis() - lastExchange < 50) return;
+  lastExchange = millis();
+
   Wire.beginTransmission(UNO_ADDR);
   Wire.write((uint8_t)currentMode);
-  Wire.write(remoteValue);
-  Wire.write(remoteTrigger);
+  Wire.write(valueFromMega);
+  Wire.write(triggerFromMega);
   Wire.endTransmission();
+
+  Wire.requestFrom(UNO_ADDR, 2);
+  if (Wire.available() >= 2) {
+    valueFromUno = Wire.read();
+    lastTriggerFromUno = triggerFromUno;
+    triggerFromUno = Wire.read();
+  }
+}
+
+void readSensors() {
+  valueFromMega = 0;
+  triggerFromMega = 0;
+  digitalWrite(ledPin, (currentMode == POLLEN) ? HIGH : LOW);
+
+  switch (currentMode) {
+    case POLLEN:
+      triggerFromMega = (analogRead(lightSensorPin) > 600) ? 1 : 0;
+      break;
+  }
 }
 
 void updateLcd() {
@@ -72,7 +94,7 @@ void updateLcd() {
 }
 
 void playModeTone() {
-  int freq = 261 + 32 * currentMode; // different tone per mode
+  int freq = 261 + currentMode * 32;
   tone(buzzerPin, freq, 10);
 }
 
@@ -85,22 +107,38 @@ void playToneForMode() {
 }
 
 void playSeesawTone() {
-  if(remoteTrigger) {
-    tone(buzzerPin, 261, 10);
+  if (triggerFromUno == 1 && lastTriggerFromUno == 0) {
+    playRandomTone(3);
   }
 }
 
 void playArcherTone() {
-  if(remoteTrigger) {
+  static uint8_t lastArcherTrigger = 0;
+  static unsigned long lastArcherPulse = 0;
+
+  if (triggerFromUno == 1 && lastArcherTrigger == 0) {
     tone(buzzerPin, 261, 10);
-  } else {
-    int freq = map(remoteValue, 0, 100, 261, 1046);
-    tone(buzzerPin, freq, 32);
+  } 
+  else if (valueFromUno > 0 && triggerFromUno == 0) {
+    int pulseInterval = map(valueFromUno, 0, 100, 200, 20); 
+    if (millis() - lastArcherPulse > pulseInterval) {
+      int freq = map(valueFromUno, 0, 100, 261, 1046);
+      tone(buzzerPin, freq, 10);
+      lastArcherPulse = millis();
+    }
   }
+  
+  lastArcherTrigger = triggerFromUno;
 }
 
 void playPollenTone() {
-  if(remoteTrigger) {
-    tone(buzzerPin, 261, 10);
+  if (triggerFromMega == 1 && lastTriggerFromMega == 0) {
+    playRandomTone(3);
   }
+  lastTriggerFromMega = triggerFromMega;
+}
+
+void playRandomTone(uint8_t notes) {
+  int freq = 261 + 32 * random(notes);
+  tone(buzzerPin, freq, 10);
 }
