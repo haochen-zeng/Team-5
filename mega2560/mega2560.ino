@@ -1,3 +1,5 @@
+// MEGA2560
+
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -8,29 +10,35 @@ LiquidCrystal_I2C myLcd(0x3f, 16, 2);
 const int potPin = A0;
 const int lightSensorPin = A1;
 const int buzzerPin = 13;
-const int ledPin = 12;
 
 enum Mode { SEESAW, ARCHER, POLLEN, MODE_COUNT };
 constexpr int ZONE_SIZE = 1024 / MODE_COUNT;
 Mode currentMode = SEESAW;
 
-uint8_t value = 0;
-uint8_t trigger = 0;
+uint8_t remoteValue = 0;
+uint8_t remoteTrigger = 0;
 unsigned long lastSend = 0;
 
 void setup() {
   Wire.begin();
+  Wire.onReceive(receiveEvent);
   myLcd.init();
   myLcd.backlight();
-  pinMode(ledPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
   updateLcd();
 }
 
 void loop() {
   handleModeSwitch();
-  readSensors();
   sendToUNO();
+}
+
+void receiveEvent(int howMany) {
+  if (howMany < 3) return;
+  currentMode = Wire.read();
+  remoteValue = Wire.read();
+  remoteTrigger = Wire.read();
+  playToneForMode();
 }
 
 void handleModeSwitch() {
@@ -44,26 +52,13 @@ void handleModeSwitch() {
   }
 }
 
-void readSensors() {
-  value = 0;
-  trigger = 0;
-  if (currentMode == POLLEN) checkPollenLight();
-  else analogWrite(ledPin, 0);
-}
-
-void checkPollenLight() {
-  analogWrite(ledPin, 180);
-  trigger = (analogRead(lightSensorPin) > 600) ? 1 : 0;
-  if (trigger) playPollenTone();
-}
-
 void sendToUNO() {
   if (millis() - lastSend < 30) return;
   lastSend = millis();
   Wire.beginTransmission(UNO_ADDR);
   Wire.write((uint8_t)currentMode);
-  Wire.write(value);
-  Wire.write(trigger);
+  Wire.write(remoteValue);
+  Wire.write(remoteTrigger);
   Wire.endTransmission();
 }
 
@@ -76,12 +71,36 @@ void updateLcd() {
   for (int i = 6; i < 16; i++) myLcd.print(" ");
 }
 
-// ================== BUZZER ==================
 void playModeTone() {
   int freq = 261 + 32 * currentMode; // different tone per mode
-  tone(buzzerPin, freq, 10);          // 150ms beep
+  tone(buzzerPin, freq, 10);
+}
+
+void playToneForMode() {
+  switch (currentMode) {
+    case SEESAW: playSeesawTone(); break;
+    case ARCHER: playArcherTone(); break;
+    case POLLEN: playPollenTone(); break;
+  }
+}
+
+void playSeesawTone() {
+  if(remoteTrigger) {
+    tone(buzzerPin, 261, 10);
+  }
+}
+
+void playArcherTone() {
+  if(remoteTrigger) {
+    tone(buzzerPin, 261, 10);
+  } else {
+    int freq = map(remoteValue, 0, 100, 261, 1046);
+    tone(buzzerPin, freq, 32);
+  }
 }
 
 void playPollenTone() {
-  tone(buzzerPin, 261, 10);           // short tone for pollen trigger
+  if(remoteTrigger) {
+    tone(buzzerPin, 261, 10);
+  }
 }

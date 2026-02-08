@@ -1,3 +1,5 @@
+// UNO
+
 #include <Wire.h>
 #include <Servo.h>
 #include <Adafruit_NeoPixel.h>
@@ -7,6 +9,7 @@
 uint8_t currentMode = 0;
 uint8_t remoteValue = 0;
 uint8_t remoteTrigger = 0;
+unsigned long lastSend = 0;
 
 const int servoPin = 2;
 const int neoPin = 3;
@@ -70,6 +73,7 @@ void loop() {
   handleServoButtons();
   updateTiltState();
   runCurrentMode();
+  sendToMega();
   delay(25);
 }
 
@@ -99,6 +103,29 @@ void runCurrentMode() {
     case 1: runArcherMode(); break;
     case 2: runPollenMode(); break;
   }
+}
+
+void sendToMega() {
+  switch (currentMode) {
+    case 0:
+      remoteValue = tiltChangeCounter;
+      remoteTrigger = (currentTilt != previousTilt) ? 1 : 0;
+      break;
+    case 1:
+      remoteValue = tension;
+      remoteTrigger = (archerState == RELEASE) ? 1 : 0;
+      break;
+    case 2:
+      remoteValue = 0;
+      break;
+  }
+  if (millis() - lastSend < 30) return;
+  lastSend = millis();
+  Wire.beginTransmission(I2C_ADDR);
+  Wire.write(currentMode);
+  Wire.write(remoteValue);
+  Wire.write(remoteTrigger);
+  Wire.endTransmission();
 }
 
 void runSeesawMode() {
@@ -151,8 +178,7 @@ void runSeesawHue() {
   leftHue = (leftHue + 4000) % 65536;
   rightHue = (rightHue - 4000 + 65536) % 65536;
   for (int i = 0; i < numberOfPixels; i++) {
-    uint32_t c = (i < numberOfPixels / 2) ? pixels.ColorHSV(leftHue, 255, 255)
-                                         : pixels.ColorHSV(rightHue, 255, 255);
+    uint32_t c = (i < numberOfPixels / 2) ? pixels.ColorHSV(leftHue, 255, 255) : pixels.ColorHSV(rightHue, 255, 255);
     pixels.setPixelColor(i, c);
   }
   pixels.show();
@@ -232,7 +258,7 @@ void runPollenMode() {
   static int head = 0;
   if (remoteTrigger && !lastPollenTrigger) {
     head = (head + 1) % numberOfPixels;
-    flipTilt(); // flip tilt to opposite side
+    flipTilt();
   }
   lastPollenTrigger = remoteTrigger;
   pixels.clear();
@@ -244,7 +270,7 @@ void runPollenMode() {
 void flipTilt() {
   if (currentTilt == TiltState::LEFT) pos = 150;
   else if (currentTilt == TiltState::RIGHT) pos = 75;
-  else pos = 112; // middle -> pick left by default
+  else pos = 112;
   myServo.write(pos);
   updateTiltState();
 }
