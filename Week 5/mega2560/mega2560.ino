@@ -11,12 +11,13 @@ LiquidCrystal_I2C myLcd(0x3f, 16, 2);
 const int potPin = A0;
 const int lightSensorPin = A1;
 const int ledPin = 12;
+const int pirSensorPin = 11;
 
 const int buzzerPin = 13;
-int notes[] = {NOTE_C5, NOTE_D5, NOTE_E5};
+int notes[] = {NOTE_C5, NOTE_D5, NOTE_E5, NOTE_F5};
 int noteCount = sizeof(notes) / sizeof(notes[0]);
 
-enum Mode { SEESAW, ARCHER, POLLEN, MODE_COUNT };
+enum Mode { SEESAW, ARCHER, POLLEN, SEAWEED, MODE_COUNT };
 constexpr int ZONE_SIZE = 1024 / MODE_COUNT;
 Mode currentMode = SEESAW;
 
@@ -36,6 +37,7 @@ void setup() {
   pinMode(buzzerPin, OUTPUT);
   pinMode(ledPin, OUTPUT);
   pinMode(lightSensorPin, INPUT);
+  pinMode(pirSensorPin, INPUT);
   digitalWrite(ledPin, HIGH);
   updateLcd();
 }
@@ -85,6 +87,9 @@ void readSensors() {
     case POLLEN:
       triggerFromMega = (analogRead(lightSensorPin) > 600) ? 1 : 0;
       break;
+    case SEAWEED:
+      triggerFromMega = (digitalRead(pirSensorPin) == LOW) ? 1 : 0;
+      break;
   }
 }
 
@@ -92,13 +97,13 @@ void updateLcd() {
   myLcd.setCursor(0, 0);
   myLcd.print("Team Bread Bored");
   myLcd.setCursor(0, 1);
-  const char* modeNames[MODE_COUNT] = {"Seesaw", "Archer", "Pollen"};
+  const char* modeNames[MODE_COUNT] = {"Seesaw", "Archer", "Pollen", "Seaweed"};
   myLcd.print(modeNames[currentMode]);
   for (int i = 6; i < 16; i++) myLcd.print(" ");
 }
 
 void playModeTone() {
-  tone(buzzerPin, notes[currentMode], 10);
+  tone(buzzerPin, notes[currentMode], 25);
 }
 
 void playToneForMode() {
@@ -106,6 +111,7 @@ void playToneForMode() {
     case SEESAW: playSeesawTone(); break;
     case ARCHER: playArcherTone(); break;
     case POLLEN: playPollenTone(); break;
+    case SEAWEED: playSeaweedTone(); break;
   }
 }
 
@@ -120,13 +126,13 @@ void playArcherTone() {
   static unsigned long lastArcherPulse = 0;
 
   if (triggerFromUno == 1 && lastArcherTrigger == 0) {
-    tone(buzzerPin, NOTE_C5, 10);
+    tone(buzzerPin, NOTE_C5, 25);
   } 
   else if (valueFromUno > 0 && triggerFromUno == 0) {
     int pulseInterval = map(valueFromUno, 0, 100, 200, 20); 
     if (millis() - lastArcherPulse > pulseInterval) {
       int freq = map(valueFromUno, 0, 100, NOTE_C5, NOTE_C6);
-      tone(buzzerPin, freq, 10);
+      tone(buzzerPin, freq, 25);
       lastArcherPulse = millis();
     }
   }
@@ -141,6 +147,13 @@ void playPollenTone() {
   lastTriggerFromMega = triggerFromMega;
 }
 
+void playSeaweedTone() {
+  if (triggerFromMega == 1 && lastTriggerFromMega == 0) {
+    playRandomTone();
+  }
+  lastTriggerFromMega = triggerFromMega;
+}
+
 void playRandomTone() {
-  tone(buzzerPin, notes[random(noteCount)], 10);
+  tone(buzzerPin, notes[random(noteCount)], 25);
 }

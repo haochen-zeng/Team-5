@@ -55,6 +55,11 @@ const int maxFlips = 4;
 float leftProgress = 0;
 float rightProgress = 0;
 
+enum SeaweedState { STILL, SPARKLE };
+SeaweedState seaweedState = STILL;
+
+bool lastSeaweedTrigger = false;
+
 void setup() {
   Serial.begin(9600);
   myServo.attach(servoPin);
@@ -102,6 +107,7 @@ void runCurrentMode() {
     case 0: runSeesawMode(); break;
     case 1: runArcherMode(); break;
     case 2: runPollenMode(); break;
+    case 3: runSeaweedMode(); break;
   }
 }
 
@@ -117,6 +123,10 @@ void requestEvent() {
       dataToSend[1] = (archerState == RELEASE) ? 1 : 0;
       break;
     case 2:
+      dataToSend[0] = 0;
+      dataToSend[1] = 0;
+      break;
+    case 3:
       dataToSend[0] = 0;
       dataToSend[1] = 0;
       break;
@@ -261,6 +271,38 @@ void runPollenMode() {
   pixels.setPixelColor(head, pixels.ColorHSV(pollenHue, 200, 150));
   pixels.show();
   pollenHue = (pollenHue + 500) % 65536;
+}
+
+void runSeaweedMode() {
+  switch (seaweedState) {
+    case STILL: enterSeaweedStill(); break;
+    case SPARKLE: runSeaweedSparkle(); break;
+  }
+}
+
+void enterSeaweedStill() {
+  pixels.clear();
+  for(int p = 0; p < numberOfPixels; p++) {
+    pixels.setPixelColor(p, pixels.Color(51, 102, 102));
+  }
+  pixels.show();
+  if (remoteTrigger && !lastSeaweedTrigger) {
+    seaweedState = SPARKLE;
+  }
+  lastSeaweedTrigger = remoteTrigger;
+}
+
+void runSeaweedSparkle() {
+  for (int i = 0; i < 96; i++) {
+    pixels.clear();
+    for(int p = 0; p < numberOfPixels; p++) {
+      int sparkle = random(150, 255); // Random brightness for sparkle
+      pixels.setPixelColor(p, pixels.Color(sparkle, sparkle * 0.8, 0)); // Golden hue
+    }
+    pixels.show();
+    delay(20);
+  }
+  seaweedState = STILL;
 }
 
 void flipTilt() {
